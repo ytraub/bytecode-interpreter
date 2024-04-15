@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-embedded-graphics = "0.8.1"
 ev3dev-lang-rust = { version = "0.14.0" }
+glyph_brush_layout = "0.2.3"

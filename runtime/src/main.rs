@@ -1,29 +1,37 @@
-extern crate ev3dev_lang_rust;
+/* use ev3dev_lang_rust::motors::{LargeMotor, MotorPort};
+use ev3dev_lang_rust::sensors::{ColorSensor, SensorPort}; */
+use ev3dev_lang_rust::{Ev3Error, Ev3Result};
+use glyph_brush_layout::{ab_glyph::*, *};
 
-use ev3dev_lang_rust::motors::{LargeMotor, MotorPort};
-use ev3dev_lang_rust::sensors::{ColorSensor, SensorPort};
-use ev3dev_lang_rust::Ev3Result;
+mod utils;
 
 fn main() -> Ev3Result<()> {
-    // Get large motor on port outA.
-    let large_motor = LargeMotor::get(MotorPort::OutA)?;
+    let dejavu = FontRef::try_from_slice(include_bytes!("../fonts/DejaVuSans.ttf")).unwrap_or_else(
+        Ev3Error::InternalError {
+            msg: "Invalid Font".to_string(),
+        },
+    );
 
-    // Set command "run-direct".
-    large_motor.run_direct()?;
-
-    // Run motor.
-    large_motor.set_duty_cycle_sp(50)?;
-
-    // Find color sensor. Always returns the first recognized one.
-    let color_sensor = ColorSensor::get(SensorPort::In1)?;
-
-    // Switch to rgb mode.
-    color_sensor.set_mode_rgb_raw()?;
-
-    // Get current rgb color tuple.
-    println!("Current rgb color: {:?}", color_sensor.get_rgb()?);
-
-    large_motor.stop()?;
-
+    // Simple font mapping: FontId(0) -> deja vu sans, FontId(1) -> garamond
+    let fonts = &[dejavu];
+    let glyphs = Layout::default().calculate_glyphs(
+        fonts,
+        &SectionGeometry {
+            screen_position: (150.0, 50.0),
+            ..SectionGeometry::default()
+        },
+        &[
+            SectionText {
+                text: "hello ",
+                scale: PxScale::from(20.0),
+                font_id: FontId(0),
+            },
+            SectionText {
+                text: "glyph_brush_layout",
+                scale: PxScale::from(25.0),
+                font_id: FontId(1),
+            },
+        ],
+    );
     Ok(())
 }
