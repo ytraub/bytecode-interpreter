@@ -1,5 +1,0 @@
-[build]
-target = "armv5te-unknown-linux-musleabi"
-
-[target.armv5te-unknown-linux-musleabi]
-linker = "rust-lld"
