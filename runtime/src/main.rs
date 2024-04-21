@@ -1,5 +1,9 @@
-mod chunk;
 mod error;
+
+mod compiler;
+mod scanner;
+
+mod chunk;
 mod value;
 mod vm;
 
@@ -19,9 +23,10 @@ fn repl() -> Result<(), String> {
             _ => (),
         }
 
-        let mut buffer = String::new();
         let stdin = io::stdin();
         let mut handle = stdin.lock();
+        let mut buffer = String::new();
+        
         match handle.read_line(&mut buffer) {
             Err(_) => return Err(error::repl_error("Failed to read from stdin".to_string())),
             Ok(n) => {
@@ -47,7 +52,7 @@ fn run_file(path: &str) -> Result<(), String> {
 }
 
 fn interpret(source: String) -> Result<(), String> {
-    compile(source);
+    compiler::compile(source)?;
     return Ok(());
 }
 
