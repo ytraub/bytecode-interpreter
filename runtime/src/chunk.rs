@@ -1,31 +1,29 @@
-use crate::{
-    error,
-    value::{print_value, Value},
-};
+use crate::common::{dissasemble_error, runtime_error};
+use crate::value::{print_value, Value};
 
 #[repr(u8)]
 #[derive(Debug)]
 pub enum OpCode {
-    OpReturn = 1,
-    OpConstant = 2,
-    OpNegate = 3,
-    OpAdd = 4,
-    OpSubtract = 5,
-    OpMultiply = 6,
-    OpDivide = 7,
+    OpReturn = 0,
+    OpConstant = 1,
+    OpNegate = 2,
+    OpAdd = 3,
+    OpSubtract = 4,
+    OpMultiply = 5,
+    OpDivide = 6,
 }
 
 pub fn byte_to_op(byte: u8) -> Result<OpCode, String> {
     match byte {
-        1 => return Ok(OpCode::OpReturn),
-        2 => return Ok(OpCode::OpConstant),
-        3 => return Ok(OpCode::OpNegate),
-        4 => return Ok(OpCode::OpAdd),
-        5 => return Ok(OpCode::OpSubtract),
-        6 => return Ok(OpCode::OpMultiply),
-        7 => return Ok(OpCode::OpDivide),
+        0 => return Ok(OpCode::OpReturn),
+        1 => return Ok(OpCode::OpConstant),
+        2 => return Ok(OpCode::OpNegate),
+        3 => return Ok(OpCode::OpAdd),
+        4 => return Ok(OpCode::OpSubtract),
+        5 => return Ok(OpCode::OpMultiply),
+        6 => return Ok(OpCode::OpDivide),
         _ => {
-            return Err(error::runtime_error(format!(
+            return Err(runtime_error(format!(
                 "Invalid conversion to instruction from byte: '{}'\nInstruction doesn't exist.",
                 byte
             )))
@@ -33,7 +31,7 @@ pub fn byte_to_op(byte: u8) -> Result<OpCode, String> {
     };
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Chunk {
     pub code: Vec<u8>,
     pub constants: Vec<Value>,
@@ -109,14 +107,14 @@ impl Chunk {
                     return Ok(self.simple_instruction("OP_DIVIDE", offset));
                 }
                 _ => {
-                    return Err(error::dissasemble_error(format!(
+                    return Err(dissasemble_error(format!(
                         "Unknown instruction found: '{:?}'\nDissasembling not implemented.",
                         instruction
                     )));
                 }
             }
         } else {
-            return Err(error::dissasemble_error(format!(
+            return Err(dissasemble_error(format!(
                 "Invalid instruction found at offset: '{}'\nOffset out of bounds.",
                 offset
             )));

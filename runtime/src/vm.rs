@@ -1,11 +1,9 @@
 use std::collections::VecDeque;
 
-use crate::{
-    chunk::{byte_to_op, Chunk, OpCode},
-    value::{print_value, Value},
-};
-
-pub const DEBUG_TRACE_EXECUTION: bool = true;
+use crate::chunk::{byte_to_op, Chunk, OpCode};
+use crate::common::DEBUG_TRACE_EXECUTION;
+use crate::compiler::Compiler;
+use crate::value::{print_value, Value};
 
 pub enum InterpretResult {
     InterpretCompileError,
@@ -15,23 +13,33 @@ pub enum InterpretResult {
 #[derive(Debug)]
 pub struct Vm {
     chunk: Option<Chunk>,
-    ip: usize,
     stack: VecDeque<Value>,
+    ip: usize,
 }
 
 impl Vm {
     pub fn new() -> Self {
         Self {
             chunk: None,
-            ip: 0,
             stack: VecDeque::new(),
+            ip: 0,
         }
     }
 
-    pub fn interpret(&mut self, chunk: Chunk) -> Result<(), InterpretResult> {
+    pub fn interpret(&mut self, source: String) -> Result<(), InterpretResult> {
+        let mut compiler = Compiler::from_source(source);
+        let chunk = Chunk::new();
+
+        match compiler.compile(&chunk) {
+            false => return Err(InterpretResult::InterpretCompileError),
+            _ => (),
+        };
+
         self.chunk = Some(chunk);
         self.ip = 0;
-        return self.run();
+
+        let result = self.run();
+        return result;
     }
 
     pub fn run(&mut self) -> Result<(), InterpretResult> {

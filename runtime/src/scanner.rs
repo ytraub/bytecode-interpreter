@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TokenType {
     // Single-character tokens.
     LeftParen,
@@ -74,6 +74,7 @@ fn get_keywords() -> HashMap<&'static str, TokenType> {
     ]);
 }
 
+#[derive(Clone)]
 pub struct Token {
     ttype: TokenType,
     lexeme: String,
@@ -85,12 +86,12 @@ impl Token {
         return self.line;
     }
 
-    pub fn get_type(&self) -> &TokenType {
-        return &self.ttype;
+    pub fn get_type(&self) -> TokenType {
+        return self.ttype;
     }
 
-    pub fn get_lexeme(&self) -> &String {
-        return &self.lexeme;
+    pub fn get_lexeme(&self) -> String {
+        return self.lexeme.to_string();
     }
 }
 
