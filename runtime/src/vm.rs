@@ -28,10 +28,10 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, source: String) -> Result<(), InterpretResult> {
-        let mut compiler = Compiler::from_source(source);
+        let mut compiler = Compiler::new(source);
         let chunk = Chunk::new();
 
-        match compiler.compile(chunk) {
+        match compiler.to_chunk(chunk) {
             Some(chunk) => self.chunk = Some(chunk),
             None => return Err(InterpretResult::InterpretCompileError),
         };

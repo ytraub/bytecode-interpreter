@@ -9,6 +9,10 @@ pub fn runtime_error(msg: String) -> String {
     return format!("[RUNTIME]: {}", msg);
 }
 
+pub fn compile_error(msg: String) -> String {
+    return format!("[COMPILE]: {}", msg);
+}
+
 pub fn repl_error(msg: String) -> String {
     return format!("[REPL]: {}", msg);
 }

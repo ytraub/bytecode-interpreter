@@ -1,7 +1,12 @@
+use std::fmt::format;
+use std::fs::File;
+use std::io::prelude::*;
+use std::str::Bytes;
+
 use crate::chunk::{Chunk, OpCode};
-use crate::common::DEBUG_PRINT_CODE;
-use crate::value::Value;
+use crate::common::{compile_error, DEBUG_PRINT_CODE};
 use crate::scanner::{Scanner, Token, TokenType};
+use crate::value::Value;
 
 macro_rules! rule {
     ($prefix:expr, $infix:expr, $precedence:expr) => {
@@ -111,26 +116,49 @@ pub struct Compiler {
     current: Option<Token>,
     previous: Option<Token>,
     compiling_chunk: Option<Chunk>,
+    compiling_file: Option<File>,
     had_error: bool,
     panic_mode: bool,
     scanner: Scanner,
 }
 
 impl Compiler {
-    pub fn from_source(source: String) -> Self {
+    pub fn new(source: String) -> Self {
         let scanner = Scanner::new(source);
 
         Self {
             current: None,
             previous: None,
             compiling_chunk: None,
+            compiling_file: None,
             had_error: false,
             panic_mode: false,
             scanner,
         }
     }
 
-    pub fn compile(&mut self, chunk: Chunk) -> Option<Chunk> {
+    pub fn to_file(&mut self, path: &str) -> Result<(), String> {
+        match File::create(path) {
+            Ok(file) => {
+                self.compiling_file = Some(file);
+
+                self.advance();
+                self.expression();
+                self.consume(TokenType::EOF, "Expect end of expression.".to_string());
+                self.end();
+
+                Ok(())
+            }
+            Err(message) => {
+                return Err(compile_error(format!(
+                    "Error creating file:\n\r{}",
+                    message
+                )));
+            }
+        }
+    }
+
+    pub fn to_chunk(&mut self, chunk: Chunk) -> Option<Chunk> {
         self.had_error = false;
         self.panic_mode = false;
         self.compiling_chunk = Some(chunk);
@@ -250,7 +278,7 @@ impl Compiler {
                 if current.get_type() != TokenType::Error {
                     break;
                 }
-                
+
                 self.error_at_current(current.get_lexeme().to_string());
             }
         }
@@ -277,12 +305,24 @@ impl Compiler {
 
     fn emit_byte(&mut self, byte: u8) {
         if let Some(previous) = &self.previous {
-            match self.compiling_chunk.take() {
-                Some(mut chunk) => {
+            match (self.compiling_chunk.take(), self.compiling_file.take()) {
+                (Some(mut chunk), None) => {
                     chunk.write_byte(byte, previous.get_line());
                     self.compiling_chunk = Some(chunk);
                 }
-                None => {}
+                (None, Some(mut file)) => {
+                    let contents = [byte];
+                    file.write_all(&contents);
+                    self.compiling_file = Some(file);
+                }
+                (Some(mut chunk), Some(mut file)) => {
+                    let contents = [byte];
+                    file.write_all(&contents);
+                    chunk.write_byte(byte, previous.get_line());
+                    self.compiling_file = Some(file);
+                    self.compiling_chunk = Some(chunk);
+                }
+                (None, None) => {}
             }
         }
     }
@@ -310,6 +350,10 @@ impl Compiler {
             return Ok(constant);
         }
 
+        if let Some(_) = &self.compiling_file {
+            return Ok(value as u8);
+        }
+
         return Err("No compiling chunk available.".to_string());
     }
 
@@ -317,7 +361,9 @@ impl Compiler {
         self.emit_return();
 
         if DEBUG_PRINT_CODE && !self.had_error {
-            let _ = self.compiling_chunk.as_mut().unwrap().dissasemble("code");
+            if let Some(chunk) = &self.compiling_chunk {
+                let _ = chunk.dissasemble("code");
+            }
         }
     }
 

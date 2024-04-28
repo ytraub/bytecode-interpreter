@@ -7,6 +7,7 @@ mod chunk;
 mod value;
 mod vm;
 
+use compiler::Compiler;
 use vm::{InterpretResult, Vm};
 
 use std::{
@@ -37,11 +38,16 @@ fn repl() -> Result<(), String> {
             }
         }
 
-        match run_source(buffer) {
+        match run_repl(buffer) {
             Err(_) => return Err(common::repl_error("Failed to run".to_string())),
             _ => (),
         };
     }
+}
+
+fn run_repl(source: String) -> Result<(), InterpretResult> {
+    let mut vm = Vm::new();
+    return vm.interpret(source);
 }
 
 fn run_file(path: &str) -> Result<(), String> {
@@ -52,18 +58,25 @@ fn run_file(path: &str) -> Result<(), String> {
                 msg
             )))
         }
-        Ok(source) => match run_source(source) {
-            Err(_) => return Err(common::runtime_error("Failed to run".to_string())),
-            _ => (),
-        },
-    };
+        Ok(source) => {
+            match path.split("/").last() {
+                Some(filename) => {
+                    if let Some(filename) = filename.strip_suffix(".lox") {
+                        compile_source(source, &format!("lox/bin/{}", filename));
+                        return Ok(());
+                    };
+                }
+                None => (),
+            };
 
-    Ok(())
+            return Err(common::runtime_error(format!("Invalid filename")));
+        }
+    };
 }
 
-fn run_source(source: String) -> Result<(), InterpretResult> {
-    let mut vm = Vm::new();
-    return vm.interpret(source);
+fn compile_source(source: String, path: &str) {
+    let mut compiler = Compiler::new(source);
+    compiler.to_file(path);
 }
 
 fn main() {
