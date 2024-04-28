@@ -27,7 +27,8 @@ impl Vm {
         }
     }
 
-    pub fn interpret(&mut self, source: String) -> Result<(), InterpretResult> {
+    pub fn interpret_source(&mut self, source: String) -> Result<(), InterpretResult> {
+        self.reset_stack();
         let mut compiler = Compiler::new(source);
         let chunk = Chunk::new();
 
@@ -36,6 +37,56 @@ impl Vm {
             None => return Err(InterpretResult::InterpretCompileError),
         };
 
+        dbg!(&self.chunk);
+
+        self.ip = 0;
+
+        let result = self.run();
+        return result;
+    }
+
+    pub fn interpret_op_code(&mut self, op_code: Vec<u8>) -> Result<(), InterpretResult> {
+        self.reset_stack();
+        let mut chunk = Chunk::new();
+
+        let mut lines: Vec<i32> = vec![];
+        let mut instructions = vec![];
+        let mut previous: Option<u8> = None;
+        for op in op_code {
+            if let Some(instruction) = previous {
+                // Line number
+                instructions.push(instruction);
+                lines.push(op.into());
+                previous = None;
+            } else {
+                // New instruction
+                previous = Some(op);
+            }
+        }
+
+        let mut i = 0;
+        loop {
+            if i == instructions.len() {
+                break;
+            }
+
+            let current =instructions[i];
+            match current {
+                1 => {
+                    if let Some(next) = instructions.get(i + 1) {
+                        let constant = chunk.add_constant(f64::from(*next));
+                        chunk.write_instruction(OpCode::OpConstant, lines[i]);
+                        chunk.write_byte(constant, lines[i + 1]);
+                        i += 1;
+                    }
+                }
+                _ => chunk.write_byte(current, lines[i]),
+            }
+
+            i += 1;
+        }
+
+        self.chunk = Some(chunk);
         self.ip = 0;
 
         let result = self.run();

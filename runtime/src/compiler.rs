@@ -311,18 +311,14 @@ impl Compiler {
                     self.compiling_chunk = Some(chunk);
                 }
                 (None, Some(mut file)) => {
-                    let contents = [byte];
-                    file.write_all(&contents);
+                    let contents = [byte, previous.get_line() as u8];
+                    match file.write_all(&contents) {
+                        Err(error) => self.error_at_current(error.to_string()),
+                        _ => (),
+                    };
                     self.compiling_file = Some(file);
                 }
-                (Some(mut chunk), Some(mut file)) => {
-                    let contents = [byte];
-                    file.write_all(&contents);
-                    chunk.write_byte(byte, previous.get_line());
-                    self.compiling_file = Some(file);
-                    self.compiling_chunk = Some(chunk);
-                }
-                (None, None) => {}
+                _ => {}
             }
         }
     }

@@ -47,7 +47,7 @@ fn repl() -> Result<(), String> {
 
 fn run_repl(source: String) -> Result<(), InterpretResult> {
     let mut vm = Vm::new();
-    return vm.interpret(source);
+    return vm.interpret_source(source);
 }
 
 fn run_file(path: &str) -> Result<(), String> {
@@ -62,8 +62,10 @@ fn run_file(path: &str) -> Result<(), String> {
             match path.split("/").last() {
                 Some(filename) => {
                     if let Some(filename) = filename.strip_suffix(".lox") {
-                        compile_source(source, &format!("lox/bin/{}", filename));
-                        return Ok(());
+                        match compile_source(source, &format!("lox/bin/{}", filename)) {
+                            Err(message) => return Err(message),
+                            _ => return Ok(()),
+                        };
                     };
                 }
                 None => (),
@@ -74,9 +76,23 @@ fn run_file(path: &str) -> Result<(), String> {
     };
 }
 
-fn compile_source(source: String, path: &str) {
+fn compile_source(source: String, path: &str) -> Result<(), String> {
     let mut compiler = Compiler::new(source);
-    compiler.to_file(path);
+    compiler.to_file(path)?;
+
+    match fs::read(path) {
+        Err(msg) => {
+            return Err(common::runtime_error(format!(
+                "Failed to read bin:\n\r{}",
+                msg
+            )))
+        }
+        Ok(op_code) => {
+            let mut vm = Vm::new();
+            vm.interpret_op_code(op_code);
+        }
+    };
+    Ok(())
 }
 
 fn main() {

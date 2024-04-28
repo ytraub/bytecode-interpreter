@@ -35,7 +35,7 @@ pub fn byte_to_op(byte: u8) -> Result<OpCode, String> {
 pub struct Chunk {
     pub code: Vec<u8>,
     pub constants: Vec<Value>,
-    lines: Vec<i32>,
+    pub lines: Vec<i32>,
 }
 
 impl Chunk {
