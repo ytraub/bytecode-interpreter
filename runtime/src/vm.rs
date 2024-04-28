@@ -1,8 +1,9 @@
 use std::collections::VecDeque;
 
+use crate::compiler::Compiler;
+
 use crate::chunk::{byte_to_op, Chunk, OpCode};
 use crate::common::DEBUG_TRACE_EXECUTION;
-use crate::compiler::Compiler;
 use crate::value::{print_value, Value};
 
 pub enum InterpretResult {
@@ -30,12 +31,11 @@ impl Vm {
         let mut compiler = Compiler::from_source(source);
         let chunk = Chunk::new();
 
-        match compiler.compile(&chunk) {
-            false => return Err(InterpretResult::InterpretCompileError),
-            _ => (),
+        match compiler.compile(chunk) {
+            Some(chunk) => self.chunk = Some(chunk),
+            None => return Err(InterpretResult::InterpretCompileError),
         };
 
-        self.chunk = Some(chunk);
         self.ip = 0;
 
         let result = self.run();
@@ -47,7 +47,7 @@ impl Vm {
             ($op: tt) => {
                 if let Some(a) = self.pop_stack() {
                     if let Some(b) = self.pop_stack() {
-                        self.push_stack(a $op b)
+                        self.push_stack(b $op a)
                     }
                 }
             };

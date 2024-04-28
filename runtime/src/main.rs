@@ -37,7 +37,10 @@ fn repl() -> Result<(), String> {
             }
         }
 
-        run(buffer);
+        match run_source(buffer) {
+            Err(_) => return Err(common::repl_error("Failed to run".to_string())),
+            _ => (),
+        };
     }
 }
 
@@ -49,8 +52,8 @@ fn run_file(path: &str) -> Result<(), String> {
                 msg
             )))
         }
-        Ok(source) => match run(source) {
-            Err(_) => return Err(common::runtime_error("Failed to run file".to_string())),
+        Ok(source) => match run_source(source) {
+            Err(_) => return Err(common::runtime_error("Failed to run".to_string())),
             _ => (),
         },
     };
@@ -58,7 +61,7 @@ fn run_file(path: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn run(source: String) -> Result<(), InterpretResult> {
+fn run_source(source: String) -> Result<(), InterpretResult> {
     let mut vm = Vm::new();
     return vm.interpret(source);
 }

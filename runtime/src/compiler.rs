@@ -1,7 +1,7 @@
 use crate::chunk::{Chunk, OpCode};
 use crate::common::DEBUG_PRINT_CODE;
-use crate::scanner::{Scanner, Token, TokenType};
 use crate::value::Value;
+use crate::scanner::{Scanner, Token, TokenType};
 
 macro_rules! rule {
     ($prefix:expr, $infix:expr, $precedence:expr) => {
@@ -75,7 +75,7 @@ enum Precedence {
     Primary = 10,
 }
 
-pub fn byte_to_prec(byte: u8) -> Result<Precedence, String> {
+fn byte_to_prec(byte: u8) -> Result<Precedence, String> {
     match byte {
         0 => return Ok(Precedence::None),
         1 => return Ok(Precedence::Assignment),
@@ -99,12 +99,14 @@ pub fn byte_to_prec(byte: u8) -> Result<Precedence, String> {
 
 type ParseFn = fn(&mut Compiler);
 
+#[derive(Debug)]
 struct ParseRule {
     prefix: Option<ParseFn>,
     infix: Option<ParseFn>,
     precedence: Precedence,
 }
 
+#[derive(Debug)]
 pub struct Compiler {
     current: Option<Token>,
     previous: Option<Token>,
@@ -128,16 +130,17 @@ impl Compiler {
         }
     }
 
-    pub fn compile(&mut self, chunk: &Chunk) -> bool {
+    pub fn compile(&mut self, chunk: Chunk) -> Option<Chunk> {
         self.had_error = false;
         self.panic_mode = false;
-        self.compiling_chunk = Some(chunk.clone());
+        self.compiling_chunk = Some(chunk);
 
         self.advance();
         self.expression();
-        self.consume(TokenType::EOF, "Expect end of epxression.".to_string());
+        self.consume(TokenType::EOF, "Expect end of expression.".to_string());
+        self.end();
 
-        return !self.had_error;
+        return self.compiling_chunk.take();
     }
 
     fn expression(&mut self) {
@@ -145,7 +148,7 @@ impl Compiler {
     }
 
     fn number(&mut self) {
-        if let Some(previous) = self.previous.clone() {
+        if let Some(previous) = &self.previous {
             match previous.get_lexeme().parse::<Value>() {
                 Ok(value) => self.emit_constant(value),
                 Err(err) => {
@@ -164,7 +167,7 @@ impl Compiler {
     }
 
     fn unary(&mut self) {
-        let operator_type = if let Some(previous) = self.previous.clone() {
+        let operator_type = if let Some(previous) = &self.previous {
             Some(previous.get_type())
         } else {
             None
@@ -200,9 +203,9 @@ impl Compiler {
     }
 
     fn parse_precedence(&mut self, precedence: Precedence) {
-        if let Some(previous) = &self.previous {
-            self.advance();
+        self.advance();
 
+        if let Some(previous) = &self.previous {
             let rule = self.get_rule(&previous.get_type());
             match rule {
                 ParseRule {
@@ -212,22 +215,23 @@ impl Compiler {
                 } => {
                     prefix_rule(self);
 
-                    if let Some(current) = &self.current {
-                        while precedence <= self.get_rule(&current.get_type()).precedence {
-                            self.advance();
-                            if let Some(previous) = &self.previous {
-                                let rule = self.get_rule(&previous.get_type());
+                    while let Some(current) = &self.current {
+                        if precedence > self.get_rule(&current.get_type()).precedence {
+                            break;
+                        }
+                        self.advance();
+                        if let Some(previous) = &self.previous {
+                            let rule = self.get_rule(&previous.get_type());
 
-                                match rule {
-                                    ParseRule {
-                                        prefix: _,
-                                        infix: Some(infix_rule),
-                                        precedence: _,
-                                    } => {
-                                        infix_rule(self);
-                                    }
-                                    _ => self.error_at_current("Expect expression.".to_string()),
+                            match rule {
+                                ParseRule {
+                                    prefix: _,
+                                    infix: Some(infix_rule),
+                                    precedence: _,
+                                } => {
+                                    infix_rule(self);
                                 }
+                                _ => self.error_at_current("Expect expression.".to_string()),
                             }
                         }
                     }
@@ -238,7 +242,7 @@ impl Compiler {
     }
 
     fn advance(&mut self) {
-        self.previous = self.current.clone();
+        self.previous = self.current.take();
 
         loop {
             self.current = Some(self.scanner.scan_token());
@@ -246,7 +250,7 @@ impl Compiler {
                 if current.get_type() != TokenType::Error {
                     break;
                 }
-
+                
                 self.error_at_current(current.get_lexeme().to_string());
             }
         }
@@ -263,7 +267,7 @@ impl Compiler {
         self.error_at_current(message);
     }
 
-    pub fn get_rule(&self, ttype: &TokenType) -> &ParseRule {
+    fn get_rule(&self, ttype: &TokenType) -> &ParseRule {
         if let Some(rule) = RULES.get(*ttype as usize) {
             return rule;
         } else {
@@ -271,23 +275,24 @@ impl Compiler {
         }
     }
 
-    fn emit_byte(&self, byte: u8) {
+    fn emit_byte(&mut self, byte: u8) {
         if let Some(previous) = &self.previous {
-            match self.compiling_chunk.clone() {
+            match self.compiling_chunk.take() {
                 Some(mut chunk) => {
                     chunk.write_byte(byte, previous.get_line());
+                    self.compiling_chunk = Some(chunk);
                 }
                 None => {}
             }
         }
     }
 
-    fn emit_bytes(&self, byte_1: u8, byte_2: u8) {
+    fn emit_bytes(&mut self, byte_1: u8, byte_2: u8) {
         self.emit_byte(byte_1);
         self.emit_byte(byte_2);
     }
 
-    fn emit_return(&self) {
+    fn emit_return(&mut self) {
         self.emit_byte(OpCode::OpReturn as u8);
     }
 
@@ -299,8 +304,9 @@ impl Compiler {
     }
 
     fn make_constant(&mut self, value: Value) -> Result<u8, String> {
-        if let Some(mut chunk) = self.compiling_chunk.clone() {
+        if let Some(mut chunk) = self.compiling_chunk.take() {
             let constant = chunk.add_constant(value);
+            self.compiling_chunk = Some(chunk);
             return Ok(constant);
         }
 
@@ -311,7 +317,7 @@ impl Compiler {
         self.emit_return();
 
         if DEBUG_PRINT_CODE && !self.had_error {
-            self.compiling_chunk.as_mut().unwrap().dissasemble("code");
+            let _ = self.compiling_chunk.as_mut().unwrap().dissasemble("code");
         }
     }
 

@@ -74,7 +74,7 @@ fn get_keywords() -> HashMap<&'static str, TokenType> {
     ]);
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Token {
     ttype: TokenType,
     lexeme: String,
@@ -95,6 +95,7 @@ impl Token {
     }
 }
 
+#[derive(Debug)]
 pub struct Scanner {
     start: usize,
     current: usize,
@@ -344,7 +345,7 @@ impl Scanner {
                             }
                             self.advance();
                         }
-                        _ => (),
+                        _ => return,
                     };
                 }
                 _ => return,
