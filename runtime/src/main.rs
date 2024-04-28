@@ -89,10 +89,12 @@ fn compile_source(source: String, path: &str) -> Result<(), String> {
         }
         Ok(op_code) => {
             let mut vm = Vm::new();
-            vm.interpret_op_code(op_code);
+            match vm.interpret_op_code(op_code) {
+                Err(message) => return Err(common::runtime_error("Failed to run".to_string())),
+                _ => return Ok(()),
+            };
         }
     };
-    Ok(())
 }
 
 fn main() {
