@@ -18,40 +18,33 @@ use std::{
 fn repl() -> Result<(), String> {
     loop {
         print!("> ");
-
-        match io::stdout().flush() {
-            Err(_) => return Err(common::repl_error("Failed to flush stdout".to_string())),
-            _ => (),
+        if let Err(_) = io::stdout().flush() {
+            return Err(common::repl_error("Failed to flush stdout".to_string()));
         }
 
         let stdin = io::stdin();
         let mut handle = stdin.lock();
         let mut buffer = String::new();
 
-        match handle.read_line(&mut buffer) {
-            Err(_) => return Err(common::repl_error("Failed to read from stdin".to_string())),
-            Ok(n) => {
-                // Handling eof
-                if n < 2 {
-                    return Ok(());
-                }
-            }
+        if let Err(_) = handle.read_line(&mut buffer) {
+            return Err(common::repl_error("Failed to read from stdin".to_string()));
         }
 
-        match run_source(buffer) {
-            Err(_) => {
-                return Err(common::repl_error(
-                    "Failed to run due to above error.".to_string(),
-                ))
-            }
-            _ => (),
-        };
+        if buffer.len() < 2 {
+            return Ok(());
+        }
+
+        if let Err(_) = run_source(buffer) {
+            return Err(common::repl_error(
+                "Failed to run due to above error.".to_string(),
+            ));
+        }
     }
 }
 
 fn run_source(source: String) -> Result<(), InterpretResult> {
     let mut vm = Vm::new();
-    return vm.interpret_source(source);
+    vm.interpret_source(source)
 }
 
 fn run_file(input_path: &str) -> Result<(), String> {
@@ -63,33 +56,27 @@ fn run_file(input_path: &str) -> Result<(), String> {
             )))
         }
         Ok(source) => {
-            match input_path.split("/").last() {
-                Some(filename) => {
-                    if let Some(filename) = filename.strip_suffix(".lox") {
-                        // Compile to bin
-                        match compile_source(source, &format!("lox/bin/{}", filename)) {
-                            Ok(op_code) => {
-                                // Execute on vm
-                                let mut vm = Vm::new();
-                                match vm.interpret_op_code(op_code) {
-                                    Err(_) => {
-                                        return Err(common::runtime_error(
-                                            "Failed to run du to above error.".to_string(),
-                                        ))
-                                    }
-                                    _ => return Ok(()),
-                                };
-                            }
-                            Err(message) => return Err(message),
-                        };
-                    };
+            if let Some(filename) = input_path
+                .split('/')
+                .last()
+                .and_then(|name| name.strip_suffix(".lox"))
+            {
+                match compile_source(source, &format!("lox/bin/{}", filename)) {
+                    Ok(op_code) => {
+                        let mut vm = Vm::new();
+                        if let Err(_) = vm.interpret_op_code(op_code) {
+                            return Err(common::runtime_error(
+                                "Failed to run due to above error.".to_string(),
+                            ));
+                        }
+                        return Ok(());
+                    }
+                    Err(message) => return Err(message),
                 }
-                None => (),
-            };
-
+            }
             return Err(common::runtime_error(format!("Invalid filename")));
         }
-    };
+    }
 }
 
 fn run_bin(input_path: &str) -> Result<(), String> {
@@ -102,16 +89,14 @@ fn run_bin(input_path: &str) -> Result<(), String> {
         }
         Ok(op_code) => {
             let mut vm = Vm::new();
-            match vm.interpret_op_code(op_code) {
-                Err(_) => {
-                    return Err(common::runtime_error(
-                        "Failed to run du to above error.".to_string(),
-                    ))
-                }
-                _ => return Ok(()),
-            };
+            if let Err(_) = vm.interpret_op_code(op_code) {
+                return Err(common::runtime_error(
+                    "Failed to run due to above error.".to_string(),
+                ));
+            }
+            return Ok(());
         }
-    };
+    }
 }
 
 fn compile_file(input_path: &str) -> Result<(), String> {
@@ -123,19 +108,18 @@ fn compile_file(input_path: &str) -> Result<(), String> {
             )))
         }
         Ok(source) => {
-            match input_path.split("/").last() {
-                Some(filename) => {
-                    if let Some(filename) = filename.strip_suffix(".lox") {
-                        compile_source(source, &format!("lox/bin/{}", filename))?;
-                        return Ok(());
-                    };
-                }
-                None => (),
-            };
-
+            if let Some(filename) = input_path
+                .split('/')
+                .last()
+                .and_then(|name| name.strip_suffix(".lox"))
+            {
+                compile_source(source, &format!("lox/bin/{}", filename))?;
+                println!("[DONE]: Successfully compiled to bin!");
+                return Ok(());
+            }
             return Err(common::runtime_error(format!("Invalid filename")));
         }
-    };
+    }
 }
 
 fn compile_source(source: String, output_path: &str) -> Result<Vec<u8>, String> {
@@ -149,10 +133,8 @@ fn compile_source(source: String, output_path: &str) -> Result<Vec<u8>, String> 
                 msg
             )))
         }
-        Ok(op_code) => {
-            return Ok(op_code);
-        }
-    };
+        Ok(op_code) => return Ok(op_code),
+    }
 }
 
 fn main() {
