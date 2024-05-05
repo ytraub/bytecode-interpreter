@@ -38,20 +38,24 @@ fn repl() -> Result<(), String> {
             }
         }
 
-        match run_repl(buffer) {
-            Err(_) => return Err(common::repl_error("Failed to run due to above error.".to_string())),
+        match run_source(buffer) {
+            Err(_) => {
+                return Err(common::repl_error(
+                    "Failed to run due to above error.".to_string(),
+                ))
+            }
             _ => (),
         };
     }
 }
 
-fn run_repl(source: String) -> Result<(), InterpretResult> {
+fn run_source(source: String) -> Result<(), InterpretResult> {
     let mut vm = Vm::new();
     return vm.interpret_source(source);
 }
 
-fn run_file(path: &str) -> Result<(), String> {
-    match fs::read_to_string(path) {
+fn run_file(input_path: &str) -> Result<(), String> {
+    match fs::read_to_string(input_path) {
         Err(msg) => {
             return Err(common::runtime_error(format!(
                 "Failed to read file:\n\r{}",
@@ -59,12 +63,24 @@ fn run_file(path: &str) -> Result<(), String> {
             )))
         }
         Ok(source) => {
-            match path.split("/").last() {
+            match input_path.split("/").last() {
                 Some(filename) => {
                     if let Some(filename) = filename.strip_suffix(".lox") {
+                        // Compile to bin
                         match compile_source(source, &format!("lox/bin/{}", filename)) {
+                            Ok(op_code) => {
+                                // Execute on vm
+                                let mut vm = Vm::new();
+                                match vm.interpret_op_code(op_code) {
+                                    Err(_) => {
+                                        return Err(common::runtime_error(
+                                            "Failed to run du to above error.".to_string(),
+                                        ))
+                                    }
+                                    _ => return Ok(()),
+                                };
+                            }
                             Err(message) => return Err(message),
-                            _ => return Ok(()),
                         };
                     };
                 }
@@ -76,11 +92,57 @@ fn run_file(path: &str) -> Result<(), String> {
     };
 }
 
-fn compile_source(source: String, path: &str) -> Result<(), String> {
-    let mut compiler = Compiler::new(source);
-    compiler.to_file(path)?;
+fn run_bin(input_path: &str) -> Result<(), String> {
+    match fs::read(input_path) {
+        Err(msg) => {
+            return Err(common::runtime_error(format!(
+                "Failed to read bin at {}:\n\r{}",
+                input_path, msg
+            )))
+        }
+        Ok(op_code) => {
+            let mut vm = Vm::new();
+            match vm.interpret_op_code(op_code) {
+                Err(_) => {
+                    return Err(common::runtime_error(
+                        "Failed to run du to above error.".to_string(),
+                    ))
+                }
+                _ => return Ok(()),
+            };
+        }
+    };
+}
 
-    match fs::read(path) {
+fn compile_file(input_path: &str) -> Result<(), String> {
+    match fs::read_to_string(input_path) {
+        Err(msg) => {
+            return Err(common::runtime_error(format!(
+                "Failed to read file at {}:\n\r{}",
+                input_path, msg
+            )))
+        }
+        Ok(source) => {
+            match input_path.split("/").last() {
+                Some(filename) => {
+                    if let Some(filename) = filename.strip_suffix(".lox") {
+                        compile_source(source, &format!("lox/bin/{}", filename))?;
+                        return Ok(());
+                    };
+                }
+                None => (),
+            };
+
+            return Err(common::runtime_error(format!("Invalid filename")));
+        }
+    };
+}
+
+fn compile_source(source: String, output_path: &str) -> Result<Vec<u8>, String> {
+    let mut compiler = Compiler::new(source);
+    compiler.to_file(output_path)?;
+
+    match fs::read(output_path) {
         Err(msg) => {
             return Err(common::runtime_error(format!(
                 "Failed to read bin:\n\r{}",
@@ -88,11 +150,7 @@ fn compile_source(source: String, path: &str) -> Result<(), String> {
             )))
         }
         Ok(op_code) => {
-            let mut vm = Vm::new();
-            match vm.interpret_op_code(op_code) {
-                Err(_) => return Err(common::runtime_error("Failed to run du to above error.".to_string())),
-                _ => return Ok(()),
-            };
+            return Ok(op_code);
         }
     };
 }
@@ -110,9 +168,17 @@ fn main() {
     let args: Vec<_> = env::args().collect();
     match args.len() {
         1 => handle_run!(repl()),
-        2 => handle_run!(run_file(&args[1])),
+        3 => match args[1].as_str() {
+            "run" => handle_run!(run_file(args[2].as_str())),
+            "compile" => handle_run!(compile_file(args[2].as_str())),
+            "execute" => handle_run!(run_bin(args[2].as_str())),
+            _ => {
+                println!("[USAGE]: runtime [action] [source]");
+                std::process::exit(64);
+            }
+        },
         _ => {
-            println!("[USAGE]: runtime [source]");
+            println!("[USAGE]: runtime [action] [source]");
             std::process::exit(64);
         }
     }

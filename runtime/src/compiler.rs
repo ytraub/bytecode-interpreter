@@ -140,6 +140,8 @@ impl Compiler {
     pub fn to_file(&mut self, path: &str) -> Result<(), String> {
         match File::create(path) {
             Ok(file) => {
+                self.had_error = false;
+                self.panic_mode = false;
                 self.compiling_file = Some(file);
 
                 self.advance();
