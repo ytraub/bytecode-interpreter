@@ -50,17 +50,17 @@ impl Vm {
         let mut chunk = Chunk::new();
 
         let mut lines: Vec<i32> = vec![];
-        let mut instructions = vec![];
+        let mut instructions: Vec<u8> = vec![];
         let mut previous: Option<u8> = None;
+
         for op in op_code {
-            if let Some(instruction) = previous {
-                // Line number
-                instructions.push(instruction);
-                lines.push(op.into());
-                previous = None;
-            } else {
-                // New instruction
-                previous = Some(op);
+            match previous {
+                Some(instruction) => {
+                    instructions.push(instruction);
+                    lines.push(op.into());
+                    previous = None;
+                }
+                None => previous = Some(op),
             }
         }
 
@@ -70,7 +70,7 @@ impl Vm {
                 break;
             }
 
-            let current =instructions[i];
+            let current = instructions[i];
             match current {
                 1 => {
                     if let Some(next) = instructions.get(i + 1) {
@@ -89,8 +89,7 @@ impl Vm {
         self.chunk = Some(chunk);
         self.ip = 0;
 
-        let result = self.run();
-        return result;
+        self.run()
     }
 
     pub fn run(&mut self) -> Result<(), InterpretResult> {

@@ -39,7 +39,7 @@ fn repl() -> Result<(), String> {
         }
 
         match run_repl(buffer) {
-            Err(_) => return Err(common::repl_error("Failed to run".to_string())),
+            Err(_) => return Err(common::repl_error("Failed to run due to above error.".to_string())),
             _ => (),
         };
     }
@@ -90,7 +90,7 @@ fn compile_source(source: String, path: &str) -> Result<(), String> {
         Ok(op_code) => {
             let mut vm = Vm::new();
             match vm.interpret_op_code(op_code) {
-                Err(message) => return Err(common::runtime_error("Failed to run".to_string())),
+                Err(_) => return Err(common::runtime_error("Failed to run du to above error.".to_string())),
                 _ => return Ok(()),
             };
         }
