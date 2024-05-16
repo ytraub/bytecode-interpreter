@@ -1,5 +1,5 @@
 use crate::common::{dissasemble_error, runtime_error};
-use crate::value::{print_value, Value};
+use crate::value::Value;
 
 #[repr(u8)]
 #[derive(Debug)]
@@ -11,6 +11,13 @@ pub enum OpCode {
     OpSubtract = 4,
     OpMultiply = 5,
     OpDivide = 6,
+    OpNil = 7,
+    OpTrue = 8,
+    OpFalse = 9,
+    OpNot = 10,
+    OpEqual = 11,
+    OpGreater = 12,
+    OpLess = 13,
 }
 
 pub fn byte_to_op(byte: u8) -> Result<OpCode, String> {
@@ -22,6 +29,13 @@ pub fn byte_to_op(byte: u8) -> Result<OpCode, String> {
         4 => return Ok(OpCode::OpSubtract),
         5 => return Ok(OpCode::OpMultiply),
         6 => return Ok(OpCode::OpDivide),
+        7 => return Ok(OpCode::OpNil),
+        8 => return Ok(OpCode::OpTrue),
+        9 => return Ok(OpCode::OpFalse),
+        10 => return Ok(OpCode::OpNot),
+        11 => return Ok(OpCode::OpEqual),
+        12 => return Ok(OpCode::OpGreater),
+        13 => return Ok(OpCode::OpLess),
         _ => {
             return Err(runtime_error(format!(
                 "Invalid conversion to instruction from byte: '{}'\nInstruction doesn't exist.",
@@ -106,6 +120,19 @@ impl Chunk {
                 OpCode::OpDivide => {
                     return Ok(self.simple_instruction("OP_DIVIDE", offset));
                 }
+                OpCode::OpEqual => {
+                    return Ok(self.simple_instruction("OP_EQUAL", offset));
+                }
+                OpCode::OpGreater => {
+                    return Ok(self.simple_instruction("OP_GREATER", offset));
+                }
+                OpCode::OpLess => {
+                    return Ok(self.simple_instruction("OP_LESS", offset));
+                }
+                OpCode::OpNil => return Ok(self.simple_instruction("OP_NIL", offset)),
+                OpCode::OpTrue => return Ok(self.simple_instruction("OP_TRUE", offset)),
+                OpCode::OpFalse => return Ok(self.simple_instruction("OP_FALSE", offset)),
+                OpCode::OpNot => return Ok(self.simple_instruction("OP_NOT", offset)),
                 _ => {
                     return Err(dissasemble_error(format!(
                         "Unknown instruction found: '{:?}'\nDissasembling not implemented.",
@@ -129,7 +156,7 @@ impl Chunk {
     fn constant_instruction(&self, name: &str, offset: usize) -> usize {
         let constant = self.code[offset + 1];
         print!("{:16} {:04} '", name, constant);
-        print_value(self.constants[constant as usize]);
+        self.constants[constant as usize].print();
         println!("'");
         return offset + 2;
     }

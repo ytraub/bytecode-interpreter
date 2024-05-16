@@ -71,7 +71,7 @@ fn run_file(input_path: &str) -> Result<(), String> {
                         }
                         return Ok(());
                     }
-                    Err(message) => return Err(message),
+                    Err(msg) => return Err(msg),
                 }
             }
             return Err(common::runtime_error(format!("Invalid filename")));

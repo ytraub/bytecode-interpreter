@@ -1,12 +1,10 @@
-use std::fmt::format;
 use std::fs::File;
 use std::io::prelude::*;
-use std::str::Bytes;
 
 use crate::chunk::{Chunk, OpCode};
 use crate::common::{compile_error, DEBUG_PRINT_CODE};
 use crate::scanner::{Scanner, Token, TokenType};
-use crate::value::Value;
+use crate::value::{Number, Value};
 
 macro_rules! rule {
     ($prefix:expr, $infix:expr, $precedence:expr) => {
@@ -34,31 +32,31 @@ const RULES: [ParseRule; 40] = [
     rule!(None, None, Precedence::None),                     // TOKEN_SEMICOLON
     rule!(None, Some(Compiler::binary), Precedence::Factor), // TOKEN_SLASH
     rule!(None, Some(Compiler::binary), Precedence::Factor), // TOKEN_STAR
-    rule!(None, None, Precedence::None),                     // TOKEN_BANG
-    rule!(None, None, Precedence::None),                     // TOKEN_BANG_EQUAL
+    rule!(Some(Compiler::unary), None, Precedence::None),    // TOKEN_BANG
+    rule!(None, Some(Compiler::binary), Precedence::Equality), // TOKEN_BANG_EQUAL
     rule!(None, None, Precedence::None),                     // TOKEN_EQUAL
-    rule!(None, None, Precedence::None),                     // TOKEN_EQUAL_EQUAL
-    rule!(None, None, Precedence::None),                     // TOKEN_GREATER
-    rule!(None, None, Precedence::None),                     // TOKEN_GREATER_EQUAL
-    rule!(None, None, Precedence::None),                     // TOKEN_LESS
-    rule!(None, None, Precedence::None),                     // TOKEN_LESS_EQUAL
+    rule!(None, Some(Compiler::binary), Precedence::Equality), // TOKEN_EQUAL_EQUAL
+    rule!(None, Some(Compiler::binary), Precedence::Comparison), // TOKEN_GREATER
+    rule!(None, Some(Compiler::binary), Precedence::Comparison), // TOKEN_GREATER_EQUAL
+    rule!(None, Some(Compiler::binary), Precedence::Comparison), // TOKEN_LESS
+    rule!(None, Some(Compiler::binary), Precedence::Comparison), // TOKEN_LESS_EQUAL
     rule!(None, None, Precedence::None),                     // TOKEN_IDENTIFIER
     rule!(None, None, Precedence::None),                     // TOKEN_STRING
     rule!(Some(Compiler::number), None, Precedence::None),   // TOKEN_NUMBER
     rule!(None, None, Precedence::None),                     // TOKEN_AND
     rule!(None, None, Precedence::None),                     // TOKEN_CLASS
     rule!(None, None, Precedence::None),                     // TOKEN_ELSE
-    rule!(None, None, Precedence::None),                     // TOKEN_FALSE
+    rule!(Some(Compiler::literal), None, Precedence::None),  // TOKEN_FALSE
     rule!(None, None, Precedence::None),                     // TOKEN_FOR
     rule!(None, None, Precedence::None),                     // TOKEN_FUN
     rule!(None, None, Precedence::None),                     // TOKEN_IF
-    rule!(None, None, Precedence::None),                     // TOKEN_NIL
+    rule!(Some(Compiler::literal), None, Precedence::None),  // TOKEN_NIL
     rule!(None, None, Precedence::None),                     // TOKEN_OR
     rule!(None, None, Precedence::None),                     // TOKEN_PRINT
     rule!(None, None, Precedence::None),                     // TOKEN_RETURN
     rule!(None, None, Precedence::None),                     // TOKEN_SUPER
     rule!(None, None, Precedence::None),                     // TOKEN_THIS
-    rule!(None, None, Precedence::None),                     // TOKEN_TRUE
+    rule!(Some(Compiler::literal), None, Precedence::None),  // TOKEN_TRUE
     rule!(None, None, Precedence::None),                     // TOKEN_VAR
     rule!(None, None, Precedence::None),                     // TOKEN_WHILE
     rule!(None, None, Precedence::None),                     // TOKEN_ERROR
@@ -179,8 +177,8 @@ impl Compiler {
 
     fn number(&mut self) {
         if let Some(previous) = &self.previous {
-            match previous.get_lexeme().parse::<Value>() {
-                Ok(value) => self.emit_constant(value),
+            match previous.get_lexeme().parse::<Number>() {
+                Ok(value) => self.emit_constant(Value::from_number(value)),
                 Err(err) => {
                     self.error_at_current(format!("Unable to parse value to number.\n\r{}", err))
                 }
@@ -207,6 +205,7 @@ impl Compiler {
 
         match operator_type {
             Some(TokenType::Minus) => self.emit_byte(OpCode::OpNegate as u8),
+            Some(TokenType::Bang) => self.emit_byte(OpCode::OpNot as u8),
             None => self.error_at_current("No unary operator found.".to_string()),
             _ => return,
         }
@@ -227,6 +226,27 @@ impl Compiler {
                 TokenType::Minus => self.emit_byte(OpCode::OpSubtract as u8),
                 TokenType::Star => self.emit_byte(OpCode::OpMultiply as u8),
                 TokenType::Slash => self.emit_byte(OpCode::OpDivide as u8),
+                TokenType::BangEqual => self.emit_bytes(OpCode::OpEqual as u8, OpCode::OpNot as u8),
+                TokenType::EqualEqual => self.emit_byte(OpCode::OpEqual as u8),
+                TokenType::Greater => self.emit_byte(OpCode::OpGreater as u8),
+                TokenType::GreaterEqual => {
+                    self.emit_bytes(OpCode::OpLess as u8, OpCode::OpNot as u8)
+                }
+                TokenType::Less => self.emit_byte(OpCode::OpLess as u8),
+                TokenType::LessEqual => {
+                    self.emit_bytes(OpCode::OpGreater as u8, OpCode::OpNot as u8)
+                }
+                _ => return,
+            }
+        }
+    }
+
+    fn literal(&mut self) {
+        if let Some(previous) = &self.previous {
+            match previous.get_type() {
+                TokenType::False => self.emit_byte(OpCode::OpFalse as u8),
+                TokenType::Nil => self.emit_byte(OpCode::OpNil as u8),
+                TokenType::True => self.emit_byte(OpCode::OpTrue as u8),
                 _ => return,
             }
         }
@@ -341,7 +361,7 @@ impl Compiler {
         }
     }
 
-    fn make_constant(&mut self, value: Value) -> Result<u8, String> {
+    fn make_constant(&mut self, mut value: Value) -> Result<u8, String> {
         if let Some(mut chunk) = self.compiling_chunk.take() {
             let constant = chunk.add_constant(value);
             self.compiling_chunk = Some(chunk);
@@ -349,7 +369,11 @@ impl Compiler {
         }
 
         if let Some(_) = &self.compiling_file {
-            return Ok(value as u8);
+            if value.is_number() {
+                return Ok(value.as_number() as u8);
+            } else {
+                return Err(format!("Invalid constant found: {:?}", value));
+            }
         }
 
         return Err("No compiling chunk available.".to_string());

@@ -4,7 +4,7 @@ use crate::compiler::Compiler;
 
 use crate::chunk::{byte_to_op, Chunk, OpCode};
 use crate::common::DEBUG_TRACE_EXECUTION;
-use crate::value::{print_value, Value};
+use crate::value::{Value, ValueType};
 
 pub enum InterpretResult {
     InterpretCompileError,
@@ -36,8 +36,6 @@ impl Vm {
             Some(chunk) => self.chunk = Some(chunk),
             None => return Err(InterpretResult::InterpretCompileError),
         };
-
-        dbg!(&self.chunk);
 
         self.ip = 0;
 
@@ -74,7 +72,7 @@ impl Vm {
             match current {
                 1 => {
                     if let Some(next) = instructions.get(i + 1) {
-                        let constant = chunk.add_constant(f64::from(*next));
+                        let constant = chunk.add_constant(Value::from_number(f64::from(*next)));
                         chunk.write_instruction(OpCode::OpConstant, lines[i]);
                         chunk.write_byte(constant, lines[i + 1]);
                         i += 1;
@@ -94,10 +92,23 @@ impl Vm {
 
     pub fn run(&mut self) -> Result<(), InterpretResult> {
         macro_rules! binary_operation {
-            ($op: tt) => {
+            ($value_type: expr, $op: tt) => {
+                match (self.peek_stack(0), self.peek_stack(1)) {
+                    (Some(a), Some(b)) => {
+                        if !a.is_number() || !b.is_number() {
+                            self.runtime_error("Operands must be numbers.".to_string());
+                            return Err(InterpretResult::InterpretRuntimeError);
+                        }
+                    }
+                    _ => {
+                        self.runtime_error("Operands missing.".to_string());
+                        return Err(InterpretResult::InterpretRuntimeError);
+                    }
+                }
+
                 if let Some(a) = self.pop_stack() {
                     if let Some(b) = self.pop_stack() {
-                        self.push_stack(b $op a)
+                        self.push_stack($value_type(b.as_number() $op a.as_number()));
                     }
                 }
             };
@@ -109,7 +120,9 @@ impl Vm {
             if DEBUG_TRACE_EXECUTION {
                 print!("          ");
                 for value in &self.stack {
-                    print!("[{}]", value);
+                    print!("[");
+                    value.print();
+                    print!("]");
                 }
                 println!();
 
@@ -129,8 +142,8 @@ impl Vm {
                 Ok(operation) => match operation {
                     OpCode::OpReturn => {
                         if let Some(value) = self.pop_stack() {
-                            print_value(value);
-                            println!();
+                            value.print();
+                            println!()
                         }
 
                         return Ok(());
@@ -139,15 +152,53 @@ impl Vm {
                         let constant = self.read_constant()?;
                         self.push_stack(constant);
                     }
+                    OpCode::OpNil => self.push_stack(Value::from_nil()),
+                    OpCode::OpTrue => self.push_stack(Value::from_bool(true)),
+                    OpCode::OpFalse => {
+                        self.push_stack(Value::from_bool(false));
+                    }
                     OpCode::OpNegate => {
-                        if let Some(value) = self.pop_stack() {
-                            self.push_stack(-value);
+                        if let Some(value) = self.peek_stack(0) {
+                            if !value.is_number() {
+                                self.runtime_error("Operand must be number.".to_string());
+                                return Err(InterpretResult::InterpretRuntimeError);
+                            }
+
+                            if let Some(value) = &self.pop_stack() {
+                                self.push_stack(Value::from_number(-value.as_number()));
+                            }
                         }
                     }
-                    OpCode::OpAdd => binary_operation!(+),
-                    OpCode::OpSubtract => binary_operation!(-),
-                    OpCode::OpMultiply => binary_operation!(*),
-                    OpCode::OpDivide => binary_operation!(/),
+                    OpCode::OpNot => {
+                        if let Some(value) = &self.pop_stack() {
+                            self.push_stack(Value::from_bool(self.is_falsey(value)));
+                        }
+                    }
+                    OpCode::OpAdd => {
+                        binary_operation!(Value::from_number, +);
+                    }
+                    OpCode::OpSubtract => {
+                        binary_operation!(Value::from_number, -);
+                    }
+                    OpCode::OpMultiply => {
+                        binary_operation!(Value::from_number, *);
+                    }
+                    OpCode::OpDivide => {
+                        binary_operation!(Value::from_number, /);
+                    }
+                    OpCode::OpGreater => {
+                        binary_operation!(Value::from_bool, >);
+                    }
+                    OpCode::OpLess => {
+                        binary_operation!(Value::from_bool, <);
+                    }
+                    OpCode::OpEqual => {
+                        if let Some(a) = self.pop_stack() {
+                            if let Some(b) = self.pop_stack() {
+                                self.push_stack(Value::from_bool(self.values_equal(a, b)));
+                            }
+                        }
+                    }
                 },
                 Err(err) => {
                     println!("{}", err);
@@ -165,8 +216,40 @@ impl Vm {
         return self.stack.pop_front();
     }
 
+    pub fn peek_stack(&self, distance: usize) -> Option<&Value> {
+        return self.stack.get(self.stack.len() - (distance + 1));
+    }
+
+    fn is_falsey(&self, value: &Value) -> bool {
+        return value.is_nil() || (value.is_bool() && !value.as_bool());
+    }
+
     fn reset_stack(&mut self) {
         self.stack.clear();
+    }
+
+    fn values_equal(&self, a: Value, b: Value) -> bool {
+        if a.get_type() != b.get_type() {
+            return false;
+        }
+
+        match a.get_type() {
+            ValueType::ValBool => return a.as_bool() == b.as_bool(),
+            ValueType::ValNil => return true,
+            ValueType::ValNumber => return a.as_number() == b.as_number(),
+        }
+    }
+
+    fn runtime_error(&mut self, msg: String) {
+        println!("{}", msg);
+
+        if let Some(chunk) = self.chunk.take() {
+            let line = chunk.lines[self.ip];
+            println!("[line {}] in script\n", line);
+            self.chunk = Some(chunk);
+        }
+
+        self.reset_stack();
     }
 
     fn read_byte(&mut self) -> Result<u8, InterpretResult> {
@@ -180,7 +263,7 @@ impl Vm {
 
     fn read_constant(&mut self) -> Result<Value, InterpretResult> {
         if let Some(chunk) = &self.chunk {
-            let constant = chunk.constants[chunk.code[self.ip] as usize];
+            let constant = chunk.constants[chunk.code[self.ip] as usize].clone();
             self.ip += 1;
             return Ok(constant);
         }
